@@ -6,136 +6,112 @@ using UnityEngine.UI;
 
 public class CubeMove : MonoBehaviour
 {
-    public float timeToMove;
-    
-    private TIME_EVENT timeEvent = TIME_EVENT.PAUSE;
-    private Renderer _render;
+	public float timeToMove;
+	
+	private SliderEvent slider;
+	private TIME_EVENT timeEvent = TIME_EVENT.PAUSE;
 
+	private float _time = 0;
+	private float speed;
+	private float _startTime;
+	private Renderer _render;
+	
+	// dict of position cube at time
+	private Dictionary<float, Vector3> positionAtTime;
+	
+	private void Start()
+	{
+		positionAtTime = new Dictionary<float, Vector3>();
+		
+		slider = GameObject.Find("Slider").GetComponent<SliderEvent>();
+		
+		GameManager.Instance.AddListener(EVENT_TYPE.GAME_PLAY, IsPlay);
+		GameManager.Instance.AddListener(EVENT_TYPE.GAME_PAUSE, IsPause);
+		
+		_time = (float)Math.Round((double)slider.slider.value, 1);
+		speed = 10 / (timeToMove - _time);
+		_startTime = slider.slider.value;
+		_render = GetComponent<Renderer>();
+	}
 
-    public ArrayList positionArray;
-    private CubeAtTime _cubeAtTime;
-    private float _time = 0;
+	private void CheckTimeToMove()
+	{
+		if (_time >= timeToMove)
+		{
+			transform.localPosition = Vector3.zero;
+			return;
+		}
+		if (_time <= _startTime)
+		{
+			transform.localPosition = new Vector3(0, 0, 10);
+		}
+	}
+	private void MoveAtPause()
+	{
+		CheckTimeToMove();
+		if (transform.localPosition.z >= 0)
+		{
+			if (positionAtTime.ContainsKey(_time))
+			{
+				transform.localPosition = positionAtTime[_time];
+			}
+		}
+		else if (positionAtTime.ContainsKey(_time))
+		{
+			transform.localPosition = positionAtTime[_time];
+		}	
+	}
+	
+	private void MoveAtPlay()
+	{
+		CheckTimeToMove();
+		if (transform.localPosition.z > 0)
+		{
+			transform.localPosition -= new Vector3(0, 0, speed * Time.deltaTime);
+			if (!positionAtTime.ContainsKey(_time))
+				positionAtTime.Add(_time, transform.localPosition);
+		}
+		else if (positionAtTime.ContainsKey(_time))
+		{
+			if (positionAtTime.ContainsKey(_time))
+				transform.localPosition = positionAtTime[_time];
+		}
+	}
+	
+	private void FixedUpdate()
+	{
+		_time = (float)Math.Round((double)slider.slider.value, 1);
+		switch (timeEvent)
+		{
+			case TIME_EVENT.PLAY:
+				MoveAtPlay();
+				break;
+			case TIME_EVENT.PAUSE:
+				MoveAtPause();
+				break;
+		}
+		SetColor();
+	}
 
-    private void Start()
-    {
-        positionArray = new ArrayList();
-        _cubeAtTime = new CubeAtTime();
-        
-        _cubeAtTime.startPosition = transform.position;
-        
-        _render= GetComponent<Renderer>();
-        _cubeAtTime.Start(_time);
-        
-        //Listeners
-        GameManager.Instance.AddListener(EVENT_TYPE.GAME_PAUSE, IsPause);
-        GameManager.Instance.AddListener(EVENT_TYPE.GAME_PLAY, IsPlay);
-        GameManager.Instance.AddListener(EVENT_TYPE.TIME_CHANGE, TimeChange);
-        GameManager.Instance.AddListener(EVENT_TYPE.TIME, TimeAtSlider);
-    }
-
-    private void FixedUpdate()
-    {
-        if (timeEvent == TIME_EVENT.TIME_CHANGE)
-        {
-           MoveWhenTimeChange();
-        }
-        else if (timeEvent == TIME_EVENT.PLAY)
-        {
-           MoveWhenPlay();
-        }
-    }
-
-    private void TimeLessStart()
-    {
-        if (_time <= _cubeAtTime.startTime)
-        {
-            transform.localPosition = new Vector3(0, 0, 10f);
-            _cubeAtTime.timeAtStartCube = 0;
-            _cubeAtTime.startPosition = transform.position;
-            _render.material.SetColor("_Color", Color.gray);
-        }
-    }
-    private void MoveWhenTimeChange()
-    {
-        if (_time >= _cubeAtTime.startTime + timeToMove)
-        {
-            transform.position = transform.parent.position;
-        }
-        TimeLessStart();
-        if (_cubeAtTime.startTime <= _time && _time <= _cubeAtTime.startTime + timeToMove)
-        {
-            float speed = 10 / timeToMove;
-            if (transform.localPosition.z <= 10f)
-            {
-                if (positionArray.Count >= 1)
-                {
-                    transform.position = (Vector3) positionArray[positionArray.Count - 1];
-                    positionArray.RemoveAt(positionArray.Count - 1);
-                }
-            }
-        }
-    }
+	private void SetColor()
+	{
+		if (Vector3.Distance(transform.position, transform.parent.position) <= 0.02)
+		{
+			_render.material.SetColor("_Color", Color.red);
+		}
+		else
+		{
+			_render.material.SetColor("_Color", Color.gray);
+		}
+	}
+	
+	void IsPlay(EVENT_TYPE eventType, Component sender, object param = null)
+	{
+		timeEvent = TIME_EVENT.PLAY;
+	}
     
-    private void MoveWhenPlay()
-    {
-        _cubeAtTime.timeAtStartCube += Time.deltaTime / timeToMove;
-        _cubeAtTime.position = Vector3.Lerp(_cubeAtTime.startPosition,
-            transform.parent.position,
-            _cubeAtTime.timeAtStartCube);
-        transform.position = _cubeAtTime.position;
-        positionArray.Add(transform.position);
-        CheckDistance();
-    }
-    
-    private void TimeAtSlider(EVENT_TYPE eventType, 
-        Component sender, object param = null)
-    {
-        _time = (float) param;
-    }
-    
-    private void CheckDistance()
-    {
-        if (Vector3.Distance(transform.position, transform.parent.position) <= 0.02
-            && _render.material.color != Color.red)
-        {
-            _cubeAtTime.endTime = _time;
-            _render.material.SetColor("_Color", Color.red);
-        }
-    }
-    
-    private void TimeChange(EVENT_TYPE eventType, 
-        Component sender, object param = null)
-    {
-        timeEvent = TIME_EVENT.TIME_CHANGE;
-        _cubeAtTime.valueTime = (float) param;
-    }
-    
-    private void IsPlay(EVENT_TYPE eventType, Component sender, object param = null)
-    {
-        timeEvent = TIME_EVENT.PLAY;
-    }
-    
-    private void IsPause(EVENT_TYPE eventType, Component sender, object param = null)
-    {
-        timeEvent = TIME_EVENT.PAUSE;
-    }
-}
-
-/// <summary>
-/// Class with time var
-/// </summary>
-public class CubeAtTime
-{
-    public float valueTime;
-    public float timeAtStartCube;
-    public float startTime;
-    public float endTime;
-    public Vector3 position;
-    public Vector3 startPosition;
-    
-    public void Start(float time)
-    {
-        startTime = GameObject.Find("Slider").GetComponent<SliderEvent>().slider.value;
-    }
-    
+	void IsPause(EVENT_TYPE eventType, Component sender, object param = null)
+	{
+		timeEvent = TIME_EVENT.PAUSE;
+	}
 }
